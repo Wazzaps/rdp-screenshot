@@ -37,9 +37,9 @@ use tracing::{debug, info, trace};
 
 const HELP: &str = "\
 USAGE:
-  ironrdp-screenshot-tool --host <HOSTNAME> --port <PORT>
-                          -u/--username <USERNAME> -p/--password <PASSWORD>
-                          [-d/--domain <DOMAIN>] [-o/--output <OUTPUT_FILE.png>]
+  rdp-screenshot --host <HOSTNAME> --port <PORT>
+                 -u/--username <USERNAME> -p/--password <PASSWORD>
+                 [-d/--domain <DOMAIN>] [-o/--output <OUTPUT_FILE.png>]
 ";
 
 fn main() -> anyhow::Result<()> {
