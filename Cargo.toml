@@ -22,6 +22,7 @@ ironrdp-blocking = "0.8.0"
 ironrdp-graphics = "0.7.0"
 ironrdp-pdu = "0.7.0"
 clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
 sspi = { version = "0.18.7", features = ["network_client"] }
 tokio-rustls = "0.26.4"
 tracing = { version = "0.1.44", features = ["log"] }

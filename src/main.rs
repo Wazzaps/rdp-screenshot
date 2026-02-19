@@ -20,7 +20,10 @@
 use core::time::Duration;
 use std::io::Write as _;
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use anyhow::Context as _;
 use clap::Parser;
@@ -62,6 +65,10 @@ struct Args {
     /// Domain for authentication
     #[arg(short, long)]
     domain: Option<String>,
+
+    /// Keep the connection open and save a screenshot every 5 seconds
+    #[arg(long)]
+    keep_open: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -69,7 +76,7 @@ fn main() -> anyhow::Result<()> {
 
     setup_logging()?;
 
-    info!(args.host, args.port, args.username, ?args.output, args.domain, "run");
+    info!(args.host, args.port, args.username, ?args.output, args.domain, args.keep_open, "run");
     run(
         args.host,
         args.port,
@@ -77,6 +84,7 @@ fn main() -> anyhow::Result<()> {
         args.password,
         args.output,
         args.domain,
+        args.keep_open,
     )
 }
 
@@ -88,7 +96,7 @@ fn setup_logging() -> anyhow::Result<()> {
     let fmt_layer = tracing_subscriber::fmt::layer().compact();
 
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::WARN.into())
+        .with_default_directive(LevelFilter::INFO.into())
         .with_env_var("IRONRDP_LOG")
         .from_env_lossy();
 
@@ -108,7 +116,15 @@ fn run(
     password: String,
     output: Option<PathBuf>,
     domain: Option<String>,
+    keep_open: bool,
 ) -> anyhow::Result<()> {
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::Relaxed);
+    })
+    .context("set Ctrl+C handler")?;
+
     let config = build_config(username, password, domain);
 
     let (connection_result, framed) = connect(config, server_name, port).context("connect")?;
@@ -119,17 +135,21 @@ fn run(
         connection_result.desktop_size.height,
     );
 
-    active_stage(connection_result, framed, &mut image).context("active stage")?;
+    if keep_open {
+        active_stage_keep_open(
+            connection_result,
+            framed,
+            &mut image,
+            output.as_deref(),
+            &running,
+        )
+        .context("active stage")?;
+    } else {
+        active_stage(connection_result, framed, &mut image).context("active stage")?;
 
-    let img: image::ImageBuffer<image::Rgba<u8>, _> = image::ImageBuffer::from_raw(
-        u32::from(image.width()),
-        u32::from(image.height()),
-        image.data(),
-    )
-    .context("invalid image")?;
-
-    if let Some(output) = output {
-        img.save(output).context("save image to disk")?;
+        if let Some(output) = output {
+            save_image(&image, &output)?;
+        }
     }
 
     Ok(())
@@ -177,7 +197,7 @@ fn build_config(username: String, password: String, domain: Option<String>) -> c
 
         enable_server_pointer: false, // Disable custom pointers (there is no user interaction anyway).
         request_data: None,
-        autologon: false,
+        autologon: true,
         enable_audio_playback: false,
         pointer_software_rendering: true,
         performance_flags: PerformanceFlags::default(),
@@ -276,6 +296,86 @@ fn active_stage(
     }
 
     Ok(())
+}
+
+fn active_stage_keep_open(
+    connection_result: ConnectionResult,
+    mut framed: UpgradedFramed,
+    image: &mut DecodedImage,
+    output: Option<&Path>,
+    running: &AtomicBool,
+) -> anyhow::Result<()> {
+    let mut active_stage = ActiveStage::new(connection_result);
+    let mut screenshot_counter: u64 = 0;
+    let mut last_save = Instant::now();
+
+    loop {
+        if !running.load(Ordering::Relaxed) {
+            info!("Interrupted, shutting down");
+            break;
+        }
+
+        let (action, payload) = match framed.read_pdu() {
+            Ok((action, payload)) => (action, payload),
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                if last_save.elapsed() >= Duration::from_secs(5) {
+                    if let Some(output) = output {
+                        screenshot_counter += 1;
+                        let path = numbered_output_path(output, screenshot_counter);
+                        save_image(image, &path)?;
+                        info!(%screenshot_counter, path = %path.display(), "Saved screenshot");
+                    }
+                    last_save = Instant::now();
+                }
+                continue;
+            }
+            Err(e) => return Err(anyhow::Error::new(e).context("read frame")),
+        };
+
+        trace!(?action, frame_length = payload.len(), "Frame received");
+
+        let outputs = active_stage.process(image, action, &payload)?;
+
+        for out in outputs {
+            match out {
+                ActiveStageOutput::ResponseFrame(frame) => {
+                    framed.write_all(&frame).context("write response")?
+                }
+                ActiveStageOutput::Terminate(_) => {
+                    info!("Server terminated connection");
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn save_image(image: &DecodedImage, path: &Path) -> anyhow::Result<()> {
+    let img: image::ImageBuffer<image::Rgba<u8>, _> = image::ImageBuffer::from_raw(
+        u32::from(image.width()),
+        u32::from(image.height()),
+        image.data(),
+    )
+    .context("invalid image")?;
+
+    img.save(path).context("save image to disk")?;
+    Ok(())
+}
+
+fn numbered_output_path(base: &Path, n: u64) -> PathBuf {
+    let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = base.extension().and_then(|s| s.to_str());
+    let parent = base.parent().unwrap_or(Path::new(""));
+    match ext {
+        Some(ext) => parent.join(format!("{stem}_{n}.{ext}")),
+        None => parent.join(format!("{stem}_{n}")),
+    }
 }
 
 fn lookup_addr(hostname: &str, port: u16) -> anyhow::Result<core::net::SocketAddr> {
