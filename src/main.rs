@@ -23,6 +23,7 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 
 use anyhow::Context as _;
+use clap::Parser;
 use connector::Credentials;
 use ironrdp::connector;
 use ironrdp::connector::ConnectionResult;
@@ -35,80 +36,48 @@ use sspi::network_client::reqwest_network_client::ReqwestNetworkClient;
 use tokio_rustls::rustls;
 use tracing::{debug, info, trace};
 
-const HELP: &str = "\
-USAGE:
-  rdp-screenshot --host <HOSTNAME> --port <PORT>
-                 -u/--username <USERNAME> -p/--password <PASSWORD>
-                 [-d/--domain <DOMAIN>] [-o/--output <OUTPUT_FILE.png>]
-";
+#[derive(Debug, Parser)]
+#[command(about = "Basic RDP screenshot CLI based on IronRDP")]
+struct Args {
+    /// RDP server hostname
+    #[arg(long)]
+    host: String,
+
+    /// RDP server port
+    #[arg(long, default_value_t = 3389)]
+    port: u16,
+
+    /// Username for authentication
+    #[arg(short, long)]
+    username: String,
+
+    /// Password for authentication
+    #[arg(short, long)]
+    password: String,
+
+    /// Output PNG file path
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Domain for authentication
+    #[arg(short, long)]
+    domain: Option<String>,
+}
 
 fn main() -> anyhow::Result<()> {
-    let action = match parse_args() {
-        Ok(action) => action,
-        Err(e) => {
-            println!("{HELP}");
-            return Err(e.context("invalid argument(s)"));
-        }
-    };
+    let args = Args::parse();
 
     setup_logging()?;
 
-    match action {
-        Action::ShowHelp => {
-            println!("{HELP}");
-            Ok(())
-        }
-        Action::Run {
-            host,
-            port,
-            username,
-            password,
-            output,
-            domain,
-        } => {
-            info!(host, port, username, password, ?output, domain, "run");
-            run(host, port, username, password, output, domain)
-        }
-    }
-}
-
-#[derive(Debug)]
-enum Action {
-    ShowHelp,
-    Run {
-        host: String,
-        port: u16,
-        username: String,
-        password: String,
-        output: Option<PathBuf>,
-        domain: Option<String>,
-    },
-}
-
-fn parse_args() -> anyhow::Result<Action> {
-    let mut args = pico_args::Arguments::from_env();
-
-    let action = if args.contains(["-h", "--help"]) {
-        Action::ShowHelp
-    } else {
-        let host = args.value_from_str("--host")?;
-        let port = args.opt_value_from_str("--port")?.unwrap_or(3389);
-        let username = args.value_from_str(["-u", "--username"])?;
-        let password = args.value_from_str(["-p", "--password"])?;
-        let output = args.opt_value_from_str(["-o", "--output"])?;
-        let domain = args.opt_value_from_str(["-d", "--domain"])?;
-
-        Action::Run {
-            host,
-            port,
-            username,
-            password,
-            output,
-            domain,
-        }
-    };
-
-    Ok(action)
+    info!(args.host, args.port, args.username, ?args.output, args.domain, "run");
+    run(
+        args.host,
+        args.port,
+        args.username,
+        args.password,
+        args.output,
+        args.domain,
+    )
 }
 
 fn setup_logging() -> anyhow::Result<()> {
@@ -184,7 +153,7 @@ fn build_config(username: String, password: String, domain: Option<String>) -> c
         },
         bitmap: None,
         client_build: 0,
-        client_name: "ironrdp-screenshot-example".to_owned(),
+        client_name: "rdp-screenshot".to_owned(),
         client_dir: "C:\\Windows\\System32\\mstscax.dll".to_owned(),
 
         #[cfg(windows)]
