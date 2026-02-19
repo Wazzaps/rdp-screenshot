@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts from latest build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --workflow=build.yaml --branch=main --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful build found on main"
+            exit 1
+          fi
+          echo "Downloading artifacts from run $RUN_ID"
+          gh run download "$RUN_ID" --dir artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          for target_dir in artifacts/*/; do
+            target=$(basename "$target_dir")
+            if [[ "$target" == *"windows"* ]]; then
+              mv "$target_dir/rdp-screenshot.exe" "release-assets/rdp-screenshot-${target}.exe"
+            else
+              mv "$target_dir/rdp-screenshot" "release-assets/rdp-screenshot-${target}"
+            fi
+          done
+          ls -la release-assets/
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --draft \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes \
+            release-assets/*
