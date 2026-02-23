@@ -6,12 +6,13 @@
 //!
 //! In this basic client implementation, the client establishes a connection
 //! with the destination server, decodes incoming graphics updates, and saves the
-//! resulting output as a PNG image file on the disk.
+//! resulting output as an image file (PNG or JPEG) on the disk.
 //!
 //! # Usage example
 //!
 //! ```shell
 //! cargo run --example=screenshot -- --host <HOSTNAME> -u <USERNAME> -p <PASSWORD> -o out.png
+//! cargo run --example=screenshot -- --host <HOSTNAME> -u <USERNAME> -p <PASSWORD> -o out.jpg
 //! ```
 
 #![allow(unused_crate_dependencies)] // false positives because there is both a library and a binary
@@ -58,7 +59,7 @@ struct Args {
     #[arg(short, long)]
     password: String,
 
-    /// Output PNG file path
+    /// Output image file path (supports .png and .jpg/.jpeg)
     #[arg(short, long)]
     output: Option<PathBuf>,
 

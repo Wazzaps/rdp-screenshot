@@ -12,7 +12,7 @@ repository = "https://github.com/Wazzaps/rdp-screenshot"
 
 [dependencies]
 anyhow = "1.0.101"
-image = { version = "0.25.9", default-features = false, features = ["png"] }
+image = { version = "0.25.9", default-features = false, features = ["png", "jpeg"] }
 ironrdp = { version = "0.14.0", features = [
     "session",
     "connector",

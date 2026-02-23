@@ -11,5 +11,5 @@ Not affiliated with the IronRDP project.
 ```bash
 rdp-screenshot --host <HOSTNAME> --port <PORT>
                -u/--username <USERNAME> -p/--password <PASSWORD>
-               [-d/--domain <DOMAIN>] [-o/--output <OUTPUT_FILE.png>]
+               [-d/--domain <DOMAIN>] [-o/--output <OUTPUT_FILE>]
 ```
