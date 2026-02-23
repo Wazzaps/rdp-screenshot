@@ -1,6 +1,6 @@
 [package]
 name = "rdp-screenshot"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Basic RDP screenshot CLI based on IronRDP"
@@ -12,7 +12,10 @@ repository = "https://github.com/Wazzaps/rdp-screenshot"
 
 [dependencies]
 anyhow = "1.0.101"
-image = { version = "0.25.9", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25.9", default-features = false, features = [
+    "png",
+    "jpeg",
+] }
 ironrdp = { version = "0.14.0", features = [
     "session",
     "connector",
