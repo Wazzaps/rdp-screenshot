@@ -379,7 +379,24 @@ fn save_image(image: &DecodedImage, path: &Path) -> anyhow::Result<()> {
     )
     .context("invalid image")?;
 
-    img.save(path).context("save image to disk")?;
+    let is_jpeg = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"));
+
+    if is_jpeg {
+        let owned: image::RgbaImage = image::ImageBuffer::from_raw(
+            u32::from(image.width()),
+            u32::from(image.height()),
+            image.data().to_vec(),
+        )
+        .context("invalid image")?;
+        let rgb_img = image::DynamicImage::ImageRgba8(owned).to_rgb8();
+        rgb_img.save(path).context("save image to disk")?;
+    } else {
+        img.save(path).context("save image to disk")?;
+    }
+
     Ok(())
 }
 
