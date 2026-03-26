@@ -200,12 +200,16 @@ fn build_config(username: String, password: String, domain: Option<String>) -> c
         request_data: None,
         autologon: true,
         enable_audio_playback: false,
+        compression_type: None,
         pointer_software_rendering: true,
+        multitransport_flags: None,
         performance_flags: PerformanceFlags::default(),
         desktop_scale_factor: 0,
         hardware_id: None,
         license_cache: None,
         timezone_info: TimezoneInfo::default(),
+        alternate_shell: String::new(),
+        work_dir: String::new(),
     }
 }
 

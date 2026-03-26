@@ -1,6 +1,6 @@
 [package]
 name = "rdp-screenshot"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.88"
 description = "Basic RDP screenshot CLI based on IronRDP"
@@ -16,14 +16,14 @@ image = { version = "0.25.9", default-features = false, features = [
     "png",
     "jpeg",
 ] }
-ironrdp = { version = "0.14.0", features = [
+ironrdp = { git = "https://github.com/Devolutions/IronRDP", rev = "a6b41093ce4ece081d2538c157f6bc547c3b2607", features = [
     "session",
     "connector",
     "graphics",
 ] }
-ironrdp-blocking = "0.8.0"
-ironrdp-graphics = "0.7.0"
-ironrdp-pdu = "0.7.0"
+ironrdp-blocking = { git = "https://github.com/Devolutions/IronRDP", rev = "a6b41093ce4ece081d2538c157f6bc547c3b2607" }
+ironrdp-graphics = { git = "https://github.com/Devolutions/IronRDP", rev = "a6b41093ce4ece081d2538c157f6bc547c3b2607" }
+ironrdp-pdu = { git = "https://github.com/Devolutions/IronRDP", rev = "a6b41093ce4ece081d2538c157f6bc547c3b2607" }
 clap = { version = "4", features = ["derive"] }
 ctrlc = "3"
 sspi = { version = "0.18.7", features = ["network_client"] }
