@@ -313,11 +313,22 @@ fn active_stage_keep_open(
     let mut active_stage = ActiveStage::new(connection_result);
     let mut screenshot_counter: u64 = 0;
     let mut last_save = Instant::now();
+    let mut graphics_updated = false;
 
     loop {
         if !running.load(Ordering::Relaxed) {
             info!("Interrupted, shutting down");
             break;
+        }
+
+        if graphics_updated && last_save.elapsed() >= Duration::from_secs(5) {
+            if let Some(output) = output {
+                screenshot_counter += 1;
+                let path = numbered_output_path(output, screenshot_counter);
+                save_image(image, &path).context("save image")?;
+                info!(%screenshot_counter, path = %path.display(), "Saved screenshot");
+            }
+            last_save = Instant::now();
         }
 
         let (action, payload) = match framed.read_pdu() {
@@ -326,15 +337,6 @@ fn active_stage_keep_open(
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
-                if last_save.elapsed() >= Duration::from_secs(5) {
-                    if let Some(output) = output {
-                        screenshot_counter += 1;
-                        let path = numbered_output_path(output, screenshot_counter);
-                        save_image(image, &path)?;
-                        info!(%screenshot_counter, path = %path.display(), "Saved screenshot");
-                    }
-                    last_save = Instant::now();
-                }
                 continue;
             }
             Err(e) => return Err(anyhow::Error::new(e).context("read frame")),
@@ -342,12 +344,20 @@ fn active_stage_keep_open(
 
         trace!(?action, frame_length = payload.len(), "Frame received");
 
-        let outputs = active_stage.process(image, action, &payload)?;
+        let outputs = active_stage
+            .process(image, action, &payload)
+            .context("process frame")?;
+
+        debug!(count = outputs.len(), "Output count");
 
         for out in outputs {
             match out {
                 ActiveStageOutput::ResponseFrame(frame) => {
-                    framed.write_all(&frame).context("write response")?
+                    framed.write_all(&frame).context("write response")?;
+                    graphics_updated = true;
+                }
+                ActiveStageOutput::GraphicsUpdate(_) => {
+                    graphics_updated = true;
                 }
                 ActiveStageOutput::Terminate(_) => {
                     info!("Server terminated connection");
